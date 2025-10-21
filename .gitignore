@@ -1,0 +1,12 @@
+# Ignore setup script with tokens
+script/setup.sh
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
