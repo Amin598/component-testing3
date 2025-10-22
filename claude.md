@@ -1,90 +1,135 @@
+# CLAUDE.md — EcomCoder (Shopify Theme Assistant)
 
-Example General Workflow
-User: "[Any feature request]"
-You execute:
-
-0. wait for the Orchestrator!
-
-ASK THE USER the questions the orchestator gave you - give it the orchestrator back.
-
-1. Trigger research-agent → Understand what the feature typically includes and best practices
-2. Trigger location-subagent → Find where to implement (section file, supports blocks/inline, etc.)
-3. Trigger query-docs-agent → find out what liquid and bestpractices you actually need for the implementation logic. (give him all the information he needs about the logic so he can search for this)
-
-If multiple options: present to user and wait for selection
-
-4. Trigger html-subagent (look what do provide this agent)→ Check if reusable snippets exist or need custom HTML (or even small parts of logic)
-5. implement the complete request  → Create functional code BUT with placeholder CSS values (so you should NOT search for css- just use what is in your knowledge of a good design with every part)
-6. Trigger css-subagent → Find theme-specific CSS values to replace placeholders (later)
-7. Trigger specificity-agent → Determine correct CSS selector pattern to avoid overrides
-8. Generate final code → Replace placeholders with theme values and correct specificity (now)
-9. Implement code using Edit tools → Create/modify files in theme structure
-10. Confirm to user → Report what was created/modified and any manual steps needed
+first step: think about what the user actually wants - in a context of web design. 
 
 
+Architecture: Multi-agent system (Lead Orchestrator + 4 specialized subagents)
+
+---
+If the task is really straightforward (for example - it exists already a skill for exactly what the user wants (look inside the skill - not only the same name)) - dont use any agents and just do it yourself. - but this requieres to be very sure about the user actually want.
+
+if it requieres multiple steps to check theme structure and mcp - so it is a lot of context and not really straight forward - than use agent system!!
+
+## 5-Agent System
+
+1.⁠ ⁠Lead Orchestrator - Coordinates workflow, spawns subagents, user interaction
+2.⁠ ⁠Theme Explorer - Explores theme (structure/CSS/JS/metafields) - runs in parallel
+3.⁠ ⁠Feature Planner - Reads ⁠ /rulebooks ⁠ + ⁠ /guides ⁠, creates Phase 1-5 plans
+4.⁠ ⁠Implementation Agent - Writes code autonomously, iterates on errors
+5.⁠ ⁠Validator - Validates quality and compliance
+
+
+---
+
+## Core Rules
+
+### Mobile first
+With the large majority of online store traffic happening on mobile, designing for mobile devices must be at the forefront throughout the theme build process.
+
+### File Management
+•⁠  ⁠Never edit core theme files without explicit approval
+•⁠  ⁠All new files use ⁠ ec_ ⁠ prefix: ⁠ blocks/ec-name.liquid ⁠, ⁠ .ec-class-name ⁠
+
+### Non-Destructive Editing
+•⁠  ⁠Hide via CSS, don't delete
+•⁠  ⁠Comment out code, don't delete
+
+### Shopify Structure
+•⁠  ⁠2.0+ (has ⁠ /blocks ⁠): Create ⁠ blocks/ec-name.liquid ⁠ with 5-part structure (logic, HTML, CSS, JS, schema)
+•⁠  ⁠Legacy (no ⁠ /blocks ⁠): Create ⁠ snippets/ec-name.liquid ⁠ + update parent section
+
+### Metafields
+•⁠  ⁠Use ⁠ ecomcoder ⁠ namespace
+•⁠  ⁠Check existing before creating
+•⁠  ⁠Add debug panel to schema if using metafields
+
+### Shopify rules
+•⁠  ⁠Add to Cart Pattern - Always use product-form-component + add-to-cart-component (never simple forms)
+•⁠  ⁠Cart Drawer Add-to-Cart - Never use ⁠ {% form 'product' %} ⁠ inside cart drawers (causes page redirect). Use ⁠ <button type="button"> ⁠ with JavaScript ⁠ fetch(Theme routes.cart_add_url) ⁠ and dispatch ⁠ CartAddEvent ⁠ for AJAX-only behavior.
+•⁠  ⁠Always use ⁠ .size ⁠ (not ⁠ .count ⁠) to determine the number of items in Shopify metafield lists.
+
+### Upsells
+  - Never reload on add - Always use bundled section rendering (⁠ sections ⁠ parameter in
+  cart/add.js) + dispatch ⁠ cart:update ⁠ event to update the drawer seamlessly without closing it or
+   page refresh.
+  - Hide when in cart - Check cart state on load and listen for ⁠ cart:update ⁠ events to
+  automatically hide the upsell when the product is already in the cart (use ⁠ cart.js ⁠ to fetch
+  current cart items and compare variant IDs).
+  - Placement matters - Cart upsells must be rendered INSIDE the ⁠ <cart-items-component> ⁠
+  wrapper (between cart items and summary) so they receive section updates and can access the
+  drawer's event system without breaking the layout.
 
 
 
-THIS IS THE INPUT YOU GIVE THE AGENT
-
-
-Html-subagents:
-- you need to provide a list of all single components inside what we want to create and the entire thing itself. - Maybe he will find not the entire thing but a small part of what you need - maybe even only a similar logic (in this case you need to create the html youself but you can take it as inpiration (e.g the add to card logic))
-
-css-subagent:
-- provide a list of all css-styles your used inside the new component/section/block...
-- the output of the ai will be a list of all css-styles you need to change
+### Shopify MCP
+Always call learn_shopify_api tool first when working with Shopify APIs. It provides essential context about supported APIs and generates a conversation ID for tracking usage across tool calls. Always return the ConversationId to the above agent.
 
 
 
 
 
-Notes:
-for icons use lucide icons
+---
+
+## MCP Verification (CRITICAL)
+
+ALWAYS verify Shopify patterns with MCP before writing code.
+
+Your knowledge may be outdated. MCP provides current documentation.
+
+Use before:
+•⁠  ⁠Writing Liquid code (verify objects, filters)
+•⁠  ⁠Accessing metafields (⁠ .value ⁠? ⁠ .count ⁠ or ⁠ .size ⁠?)
+•⁠  ⁠Using product/collection properties
+
+Tools:
+
+mcp__shopify_dev__search_docs_chunks - Search docs
+mcp__shopify_dev__introspect_graphql_schema - Verify GraphQL
+mcp__shopify_dev__validate_theme - Validate Liquid
 
 
+---
 
+## EcomCoder CLI
 
---- if the request is just to edit something instead of creating something than your free to use the agents as you wish:
+Check metafield:
+⁠ bash
+ecomcoder metafield get --namespace="ecomcoder" --key="related_products" --owner-type="PRODUCT"
+ ⁠
 
-## Agent Reference Guide
+Create metafield:
+⁠ bash
+ecomcoder metafield create --name="Related Products" --namespace="ecomcoder" --key="related_products" --type="list.product_reference" --owner-type="PRODUCT"
+ ⁠
 
-### Orchestrator
-**Purpose**: First contact agent that analyzes user requests and formulates clarifying questions
-**When used**: Step 0 - Automatically triggered when user makes any feature request
-**Output**: Questions for the user to clarify requirements before implementation begins
+---
 
-### research-agent
-**Purpose**: Research best practices and typical implementations for requested features
-**When used**: Step 1 - After Orchestrator questions are answered
-**Output**: Understanding of what the feature typically includes and industry best practices
+## Knowledge Base
 
-### location-subagent (Haiku)
-**Purpose**: Determines where in the theme structure to implement the feature
-**When used**: Step 2 - After research phase
-**Checks**: /rulebooks for templates, then analyzes sections/blocks/snippets structure
-**Output**: Recommended file location (section/block/snippet/template), file paths, and dependencies
+•⁠  ⁠⁠ /rulebooks/block-creation.md ⁠ - Mandatory rules (read first)
+•⁠  ⁠⁠ /guides/[FEATURE].md ⁠ - Feature-specific requirements (if exists)
 
-### query-docs-agent
-**Purpose**: Searches official Shopify documentation for Liquid syntax, objects, and APIs
-**When used**: Step 3 - After location is determined
-**Input needed**: Specific implementation logic details so it can search effectively
-**Output**: Exact Liquid syntax, code examples, rules, and best practices from docs
+Planning: Read rulebook → Check for guide → Verify with MCP
 
-### html-subagent (Haiku)
-**Purpose**: Finds reusable snippets or similar HTML/Liquid patterns in the theme
-**When used**: Step 4 - Before creating custom HTML
-**Input needed**: List of all single components to search for (even small parts like "add to cart logic")
-**Output**: Reusable snippets with file paths, existing patterns, or recommendation to create custom HTML
+---
 
-### css-subagent (Haiku)
-**Purpose**: Finds theme-specific CSS values to replace placeholder styles
-**When used**: Step 6 - After implementation with placeholder CSS
-**Input needed**: List of all CSS styles used in the new component
-**Workflow**: Searches parent section first, then base.css if needed
-**Output**: List of CSS custom properties, color values, spacing scales, and naming conventions to use
+## Validation Checklist
 
-### specificity-agent (Haiku)
-**Purpose**: Determines correct CSS selector patterns to avoid style conflicts
-**When used**: Step 7 - Before generating final CSS
-**Output**: Recommended selector patterns, specificity levels, naming conventions, and potential conflicts to avoid
+•⁠  ⁠✅ ⁠ shopify theme check ⁠ passes (0 errors)
+•⁠  ⁠✅ All files use ec_ prefix
+•⁠  ⁠✅ Valid schema JSON
+•⁠  ⁠✅ Consistent spacing/padding
+•⁠  ⁠✅ Block placed in templates/*.json
+•⁠  ⁠✅ Responsive CSS (@media queries)
+
+---
+
+## Key Principles
+
+1.⁠ ⁠MCP First - Verify before implementing
+2.⁠ ⁠Non-Destructive - Comment out, don't delete
+3.⁠ ⁠ec_ Prefix - On everything new
+4.⁠ ⁠Read Rulebook - Always first
+5.⁠ ⁠User Approval - At checkpoints (Steps 4, 6, 7)
+
+<!-- End of CLAUDE.md -->
